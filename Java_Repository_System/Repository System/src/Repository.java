@@ -1,4 +1,5 @@
 import java.awt.*;
+import java.sql.Connection;
 import javax.swing.*;
 
 public class Repository {
@@ -6,28 +7,22 @@ public class Repository {
     int boardWidth = 900;
     int boardHeight = 600;
 
-    // Panel Section
     JFrame frame = new JFrame("Mabayuan Canteen Repository System");
     JPanel mainPanel = new JPanel();
     JPanel topPanel = new JPanel();
     JPanel leftPanel = new JPanel();
-    JPanel centerPanel = new JPanel(); // table
+    JPanel centerPanel = new JPanel();
 
-    // Top Section
     JTextField searchField = new JTextField();
     JButton searchButton = new JButton("Search");
 
-    // Left Buttons
     JButton addnewButton = new JButton("Add New Product");
     JButton editselectedButton = new JButton("<html><center>Edit Selected<br>Product</center></html>");
     JButton removeselectedButton = new JButton("<html><center>Remove Selected<br>Product</center></html>");
 
-    // Table Rows/Columns
-    String[] columns = { "ID", "Name", "Price", "Image", "Quantity", "Category" };
+    String[] columns = { "ID", "Name", "Price", "Quantity", "Category" };
 
-    // Data Section - Will be connected to DataBase once the logic and funciton are
-    // done.
-    JTable table = new JTable(new Object[0][6], columns);
+    JTable table = new JTable(new Object[0][5], columns);
     JScrollPane scrollPane = new JScrollPane(table);
 
     Repository() {
@@ -43,7 +38,6 @@ public class Repository {
         topPanel.setBackground(new Color(58, 70, 90));
 
         searchField.setFont(new Font("Arial", Font.PLAIN, 16));
-
         searchButton.setFont(new Font("Arial", Font.BOLD, 14));
         searchButton.setBackground(Color.WHITE);
         searchButton.setFocusable(false);
@@ -67,9 +61,46 @@ public class Repository {
             leftPanel.add(btn);
         }
 
-        leftPanel.add(addnewButton);
-        leftPanel.add(editselectedButton);
-        leftPanel.add(removeselectedButton);
+        // ACTION LISTENERS
+        addnewButton.addActionListener(e -> new AddWindow(this));
+
+        editselectedButton.addActionListener(e -> {
+            int selectedRow = table.getSelectedRow();
+            if (selectedRow == -1) {
+                JOptionPane.showMessageDialog(frame, "Please select a product to edit.", "No Selection",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            int id = (int) table.getValueAt(selectedRow, 0);
+            String name = (String) table.getValueAt(selectedRow, 1);
+            int price = (int) table.getValueAt(selectedRow, 2);
+            int quantity = (int) table.getValueAt(selectedRow, 3);
+            String category = (String) table.getValueAt(selectedRow, 4);
+            new EditWindow(this, id, name, price, quantity, category);
+        });
+
+        removeselectedButton.addActionListener(e -> {
+            int selectedRow = table.getSelectedRow();
+            if (selectedRow == -1) {
+                JOptionPane.showMessageDialog(frame, "Please select a product to remove.", "No Selection",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            int id = (int) table.getValueAt(selectedRow, 0);
+            String name = (String) table.getValueAt(selectedRow, 1);
+            int confirm = JOptionPane.showConfirmDialog(frame, "Remove \"" + name + "\"?", "Confirm",
+                    JOptionPane.YES_NO_OPTION);
+            if (confirm == JOptionPane.YES_OPTION) {
+                try (Connection conn = DatabaseConnection.getConnection()) {
+                    java.sql.PreparedStatement ps = conn.prepareStatement("DELETE FROM products_table WHERE Item_id=?");
+                    ps.setInt(1, id);
+                    ps.executeUpdate();
+                    loadTableData();
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(frame, "DB Error: " + ex.getMessage());
+                }
+            }
+        });
 
         // center panel
         centerPanel.setLayout(new BorderLayout());
@@ -90,7 +121,33 @@ public class Repository {
         frame.add(leftPanel, BorderLayout.WEST);
         frame.add(centerPanel, BorderLayout.CENTER);
 
+        loadTableData();
         frame.setVisible(true);
+    }
+
+    void loadTableData() {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String query = "SELECT Item_id, Item_name, Item_price, Item_quantity, Item_category FROM products_table";
+            java.sql.Statement stmt = conn.createStatement();
+            java.sql.ResultSet rs = stmt.executeQuery(query);
+
+            java.util.List<Object[]> rows = new java.util.ArrayList<>();
+            while (rs.next()) {
+                rows.add(new Object[] {
+                        rs.getInt("Item_id"),
+                        rs.getString("Item_name"),
+                        rs.getInt("Item_price"),
+                        rs.getInt("Item_quantity"),
+                        rs.getString("Item_category") // <-- backtick removed
+                });
+            }
+
+            table.setModel(new javax.swing.table.DefaultTableModel(
+                    rows.toArray(new Object[0][]), columns));
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(frame, "DB Error: S" + e.getMessage());
+        }
     }
 
     public static void main(String[] args) {
